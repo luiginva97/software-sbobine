@@ -1,11 +1,32 @@
-"""Trascrizione audio: faster-whisper (CPU / GPU NVIDIA) oppure mlx-whisper (GPU dei Mac Apple Silicon)."""
+"""Trascrizione audio: faster-whisper (CPU / GPU NVIDIA), whisper.cpp con Vulkan (GPU AMD e altre)
+oppure mlx-whisper (GPU dei Mac Apple Silicon)."""
+import collections
+import json
+import os
 import platform
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
+import urllib.request
+import wave
+from pathlib import Path
 
 _models = {}
 _force_cpu = False
 _mlx_fallito = False
+_vulkan_fallito = False
+_amd_cache = None
+
+# Modelli GGML (whisper.cpp) dal repository ufficiale su Hugging Face
+GGML_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
+GGML_MODELLI = {
+    "small": "ggml-small-q5_1.bin",
+    "medium": "ggml-medium-q5_0.bin",
+    "large-v3": "ggml-large-v3-q5_0.bin",
+    "turbo": "ggml-large-v3-turbo-q5_0.bin",
+}
 
 MLX_MODELLI = {
     "small": "mlx-community/whisper-small-mlx",
@@ -41,17 +62,71 @@ def gpu_available() -> bool:
         return False
 
 
+def _cartelle_vulkan() -> list:
+    """Cartelle dove cercare whisper-cli (build con backend Vulkan)."""
+    cartelle = []
+    env = os.environ.get("SBOBINA_WHISPER_CLI")
+    if env:
+        cartelle.append(Path(env).parent)
+    cartelle.append(Path.home() / ".sbobina" / "whisper-vulkan")
+    cartelle.append(Path(__file__).resolve().parent / "vulkan")
+    if getattr(sys, "frozen", False):
+        cartelle.append(Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / "vulkan")
+        cartelle.append(Path(sys.executable).parent / "vulkan")
+    return cartelle
+
+
+def vulkan_exe():
+    """Percorso di whisper-cli (Vulkan) se presente, altrimenti None."""
+    env = os.environ.get("SBOBINA_WHISPER_CLI")
+    if env and Path(env).is_file():
+        return Path(env)
+    nome = "whisper-cli.exe" if sys.platform == "win32" else "whisper-cli"
+    for c in _cartelle_vulkan():
+        p = c / nome
+        if p.is_file():
+            return p
+    return None
+
+
+def _vulkan_disponibile() -> bool:
+    return not _vulkan_fallito and vulkan_exe() is not None
+
+
+def amd_gpu_rilevata() -> bool:
+    """True se Windows elenca una scheda video AMD/Radeon (serve solo per i messaggi all'utente)."""
+    global _amd_cache
+    if _amd_cache is None:
+        _amd_cache = False
+        if sys.platform == "win32":
+            try:
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     "(Get-CimInstance Win32_VideoController).Name"],
+                    capture_output=True, text=True, timeout=15,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                _amd_cache = bool(re.search(r"\b(AMD|Radeon)\b", r.stdout or "", re.I))
+            except Exception:
+                _amd_cache = False
+    return _amd_cache
+
+
 def accelerazione() -> str:
-    """'cuda' (NVIDIA), 'apple' (Mac Apple Silicon con mlx-whisper) oppure 'cpu'."""
+    """'apple' (mlx-whisper), 'cuda' (NVIDIA), 'vulkan' (AMD e altre, via whisper.cpp) oppure 'cpu'."""
     if _mlx_disponibile():
         return "apple"
-    return "cuda" if gpu_available() else "cpu"
+    if gpu_available():
+        return "cuda"
+    if _vulkan_disponibile():
+        return "vulkan"
+    return "cpu"
 
 
 def scegli_modello(scelta: str) -> str:
     if scelta != "auto":
         return scelta
-    return {"cuda": "large-v3", "apple": "turbo"}.get(accelerazione(), "small")
+    return {"cuda": "large-v3", "apple": "turbo", "vulkan": "medium"}.get(accelerazione(), "small")
 
 
 # ---------------------------------------------------------------- faster-whisper
@@ -106,9 +181,73 @@ def _trascrivi_mlx(path, size, on_progress):
     return out, durata
 
 
+# ---------------------------------------------------------------- whisper.cpp + Vulkan (GPU AMD)
+def _modello_ggml(size, on_progress):
+    """Restituisce il percorso del modello GGML, scaricandolo la prima volta."""
+    nome = GGML_MODELLI.get(size, GGML_MODELLI["medium"])
+    cartella = Path.home() / ".sbobina" / "modelli-ggml"
+    cartella.mkdir(parents=True, exist_ok=True)
+    dest = cartella / nome
+    if dest.is_file() and dest.stat().st_size > 1_000_000:
+        return dest
+    on_progress(0.0)
+    tmp = dest.with_suffix(".part")
+    with urllib.request.urlopen(GGML_URL + nome, timeout=60) as r, open(tmp, "wb") as f:
+        shutil.copyfileobj(r, f, length=1024 * 1024)
+    tmp.replace(dest)
+    return dest
+
+
+def _scrivi_wav(path, audio):
+    """Scrive un WAV mono 16 kHz a 16 bit da un array float32 (formato richiesto da whisper-cli)."""
+    import numpy as np
+    pcm = (np.clip(audio, -1.0, 1.0) * 32767.0).astype("<i2")
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(pcm.tobytes())
+
+
+def _trascrivi_vulkan(path, size, on_progress):
+    exe = vulkan_exe()
+    if exe is None:
+        raise RuntimeError("whisper-cli (Vulkan) non trovato")
+    modello = _modello_ggml(size, on_progress)
+    from faster_whisper.audio import decode_audio    # decodifica senza bisogno di ffmpeg
+    audio = decode_audio(path, sampling_rate=16000)
+    durata = len(audio) / 16000.0
+    on_progress(0.0)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "audio.wav"
+        out = Path(tmp) / "out"
+        _scrivi_wav(wav, audio)
+        cmd = [str(exe), "-m", str(modello), "-f", str(wav), "-l", "it",
+               "-oj", "-of", str(out), "-pp"]
+        proc = subprocess.Popen(
+            cmd, cwd=str(exe.parent), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        coda = collections.deque(maxlen=15)
+        for riga in proc.stderr:
+            m = re.search(r"progress\s*=\s*(\d+)\s*%", riga)
+            if m:
+                on_progress(min(int(m.group(1)) / 100.0, 1.0))
+            else:
+                coda.append(riga.strip())
+        if proc.wait() != 0:
+            raise RuntimeError("whisper-cli è terminato con errore: " + " | ".join(coda)[-400:])
+        dati = json.loads((Path(str(out) + ".json")).read_text(encoding="utf-8"))
+    on_progress(1.0)
+    segs = [(float(s["offsets"]["from"]) / 1000.0, s["text"].strip())
+            for s in dati.get("transcription", []) if s.get("text", "").strip()]
+    return segs, durata
+
+
 def _trascrivi_auto(path, size, on_progress):
-    """Sceglie il motore migliore; se mlx dà errore ripiega su faster-whisper (CPU)."""
-    global _mlx_fallito
+    """Sceglie il motore migliore; se mlx o Vulkan danno errore ripiega su faster-whisper (CPU)."""
+    global _mlx_fallito, _vulkan_fallito
     if _mlx_disponibile():
         try:
             return _trascrivi_mlx(path, size, on_progress)
@@ -116,6 +255,14 @@ def _trascrivi_auto(path, size, on_progress):
             print("mlx-whisper non utilizzabile, passo a faster-whisper:", repr(e))
             _mlx_fallito = True
             size = "small" if size == "turbo" else size
+    elif not gpu_available() and _vulkan_disponibile():
+        try:
+            return _trascrivi_vulkan(path, size, on_progress)
+        except Exception as e:
+            print("whisper.cpp (Vulkan) non utilizzabile, passo a faster-whisper (CPU):", repr(e))
+            _vulkan_fallito = True
+            if size in ("turbo", "large-v3"):      # su CPU i modelli grandi sarebbero troppo lenti
+                size = "small"
     return _trascrivi_file(path, size, on_progress)
 
 

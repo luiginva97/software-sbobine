@@ -25,6 +25,22 @@ SBOBINA - come si usa
 Primo utilizzo: vengono scaricati il modello di trascrizione (0,5-3 GB) e il modello di
 riscrittura (circa 4-5 GB, via Ollama). Dopo, tutto funziona offline.
 
+GPU AMD (es. Radeon RX 6600 XT) - trascrizione accelerata con Vulkan
+--------------------------------------------------------------------
+Sulle schede AMD la trascrizione usa di default la CPU (la GPU e' supportata solo per NVIDIA con CUDA).
+Per usare la scheda AMD serve whisper.cpp compilato con il backend Vulkan:
+1. Procurati whisper-cli.exe con Vulkan (e le sue DLL, es. ggml-vulkan.dll). Le release ufficiali di
+   whisper.cpp non lo includono per Windows: puoi compilarlo da te seguendo le istruzioni ufficiali
+   (https://github.com/ggml-org/whisper.cpp, opzione CMake -DGGML_VULKAN=1) oppure usare una build
+   di una fonte di cui ti fidi. Servono i driver AMD aggiornati.
+2. Metti whisper-cli.exe e tutte le sue DLL in una di queste cartelle:
+   - C:\Users\<nome>\.sbobina\whisper-vulkan
+   - la cartella "vulkan" accanto a main.py / Sbobina.exe
+   (in alternativa imposta la variabile d'ambiente SBOBINA_WHISPER_CLI con il percorso di whisper-cli.exe).
+3. Riavvia Sbobina: in alto deve comparire "whisper.cpp con Vulkan trovato".
+Al primo uso viene scaricato il modello (nel caso "Automatico": medium, circa 0,5 GB) in
+C:\Users\<nome>\.sbobina\modelli-ggml. Se Vulkan da' errore, Sbobina ripiega da sola sulla CPU.
+
 Una sbobina generata da AI va sempre riletta prima di usarla.
 
 Motore online (opzionale): in "Opzioni avanzate" puoi usare Groq, Gemini o OpenRouter con una tua

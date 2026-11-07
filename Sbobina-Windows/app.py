@@ -75,8 +75,13 @@ def hw_text() -> str:
         return "🟢 Scheda video NVIDIA rilevata: trascrizione veloce."
     if acc == "apple":
         return "🟢 Mac con chip Apple Silicon rilevato: trascrizione accelerata."
+    if acc == "vulkan":
+        return "🟢 whisper.cpp con Vulkan trovato: trascrizione accelerata dalla scheda video (AMD o altra)."
     if sys.platform == "darwin":
         return "🟡 Mac senza accelerazione dedicata: userò la CPU (più lento, modello leggero consigliato)."
+    if tr.amd_gpu_rilevata():
+        return ("🟡 Scheda video AMD rilevata, ma manca whisper-cli (Vulkan): userò la CPU (più lento). "
+                "Vedi la sezione \"GPU AMD\" nel file LEGGIMI.txt.")
     return "🟡 Nessuna GPU NVIDIA rilevata: userò la CPU (più lento)."
 
 

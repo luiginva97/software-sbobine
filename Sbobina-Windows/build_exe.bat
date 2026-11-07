@@ -28,6 +28,11 @@ if exist ".venv\Lib\site-packages\nvidia" (
   xcopy ".venv\Lib\site-packages\nvidia" "dist\Sbobina\_internal\nvidia" /E /I /Q /Y >nul
 )
 
+rem whisper.cpp con Vulkan per le GPU AMD (se la cartella "vulkan" e' presente): la copio accanto all'exe
+if exist "vulkan\whisper-cli.exe" (
+  xcopy "vulkan" "dist\Sbobina\_internal\vulkan" /E /I /Q /Y >nul
+)
+
 echo.
 echo ==================================================
 echo  Fatto! L'app e' in: dist\Sbobina  (doppio clic su Sbobina.exe)

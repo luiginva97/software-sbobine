@@ -27,7 +27,7 @@ La prima volta l'avvio configura tutto da solo (Python, librerie, Ollama): serve
 
 ### Note per sistema
 
-- **Windows**: se c'è una scheda video NVIDIA, la trascrizione usa la GPU. Con `build_exe.bat` si crea `Sbobina.exe`, e con `installer.iss` (Inno Setup) un installatore.
+- **Windows**: se c'è una scheda video NVIDIA, la trascrizione usa la GPU. Sulle schede AMD la GPU si usa con `whisper.cpp` (Vulkan), se `whisper-cli.exe` è presente: vedi la sezione "GPU AMD" di `LEGGIMI.txt`. Con `build_exe.bat` si crea `Sbobina.exe`, e con `installer.iss` (Inno Setup) un installatore.
 - **macOS**: sui Mac con chip Apple la trascrizione è accelerata con `mlx-whisper`; sui Mac Intel si usa la CPU. Con `build_app_mac.command` si crea `Sbobina.app` e un `.dmg`.
 
 ## Motore AI
