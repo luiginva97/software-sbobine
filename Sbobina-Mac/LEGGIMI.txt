@@ -1,0 +1,40 @@
+SBOBINA PER MAC - come si usa
+=============================
+Funziona su Mac con macOS 12 o successivo. I Mac con chip Apple (M1, M2, M3, M4...) sono molto piu'
+veloci: la trascrizione usa la GPU del chip. Sui Mac Intel funziona, ma solo con la CPU (piu' lento).
+
+1. Scarica e decomprimi la cartella di Sbobina.
+
+2. Fai doppio clic su "Avvia Sbobina.command".
+   - Se macOS dice che non puo' aprirlo (file scaricato da internet): clic destro sul file > Apri > Apri.
+   - Se non si apre nulla o dice "permesso negato": apri l'app Terminale, scrivi  bash   (con uno spazio
+     dopo), trascina dentro la finestra il file "Avvia Sbobina.command" e premi Invio.
+
+3. La prima volta configura tutto da solo (serve internet, 5-15 minuti):
+   - Python: se manca ed e' installato Homebrew lo installa da solo; altrimenti si apre la pagina
+     di download di python.org: installa la versione 3.12 e riapri il file.
+   - librerie, trascrizione accelerata (chip Apple) e Ollama (il motore AI locale gratuito, tramite Homebrew).
+     Se non hai Homebrew, scarica Ollama da https://ollama.com/download
+
+4. Si apre la finestra di Sbobina. Poi funziona come su Windows: carichi l'audio, compili i dati,
+   "Genera la bozza", modifichi il testo e scegli le slide, "Esporta Word e PDF".
+   I file finiscono in Documenti/Sbobine/<materia_numero_data>.
+   La prima volta macOS chiede il permesso di accedere alla cartella Documenti: consenti.
+
+Cose da sapere
+- Primo utilizzo: vengono scaricati i modelli (trascrizione 1-3 GB, riscrittura circa 4-5 GB).
+- Sui Mac con chip Apple la barra di avanzamento della trascrizione resta ferma finche' ogni
+  registrazione non e' finita: e' normale, non e' bloccato.
+- RAM: con 8 GB usa modelli piccoli; con 16 GB o piu' va bene anche il modello grande.
+- Il PDF e' identico al Word se e' installato LibreOffice (gratuito); altrimenti viene creato
+  comunque, con un aspetto leggermente diverso.
+- Una sbobina fatta dall'AI va sempre riletta prima di usarla.
+
+Creare un'app da condividere (Sbobina.app / .dmg)
+- Su un Mac esegui "build_app_mac.command" (stesso trucco del punto 2 se non si apre).
+- Ottieni dist/Sbobina-mac-<chip>.dmg. Un .dmg creato su un Mac con chip Apple funziona solo su Mac
+  con chip Apple; uno creato su Mac Intel solo su Intel.
+- L'app non e' firmata con un account Apple Developer (99 dollari l'anno): chi la scarica deve fare
+  clic destro > Apri la prima volta, oppure Impostazioni di Sistema > Privacy e sicurezza > "Apri comunque".
+
+Se qualcosa non va, guarda Documenti/Sbobine/sbobina.log
