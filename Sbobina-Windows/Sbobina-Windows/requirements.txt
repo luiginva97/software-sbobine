@@ -1,0 +1,7 @@
+faster-whisper
+gradio>=5.0,<6
+python-docx
+pywebview
+pymupdf
+python-pptx
+reportlab
